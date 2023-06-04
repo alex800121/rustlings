@@ -7,20 +7,31 @@
       flake = false;
     };
     flake-utils.url = "github:numtide/flake-utils";
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-23.05";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs = { self, flake-utils, nixpkgs, ... }:
+  outputs = { self, flake-utils, nixpkgs, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [
+            rust-overlay.overlays.default
+          ];
+        };
 
         cargoBuildInputs = with pkgs; lib.optionals stdenv.isDarwin [
           darwin.apple_sdk.frameworks.CoreServices
         ];
 
+        rustVersion = pkgs.rust-bin.stable.latest;
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = rustVersion.complete;
+          rustc = rustVersion.complete;
+        };
         rustlings =
-          pkgs.rustPlatform.buildRustPackage {
+          rustPlatform.buildRustPackage {
             name = "rustlings";
             version = "5.5.1";
 
@@ -50,15 +61,11 @@
       in
       {
         devShell = pkgs.mkShell {
-          RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
+          RUST_SRC_PATH = "${rustVersion.rust-src}";
 
-          buildInputs = with pkgs; [
-            cargo
-            rustc
-            rust-analyzer
+          buildInputs = [
+            rustVersion.complete
             rustlings
-            rustfmt
-            clippy
           ] ++ cargoBuildInputs;
         };
       });
